@@ -1,0 +1,888 @@
+---
+title: "Prosper Loans Exploration "
+author: Randy Jackson
+date: March 5, 2018
+output: 
+  html_document:
+    keep_md: yes
+    toc: yes
+    toc_float: yes
+---
+
+# General Information
+
+In the following analysis I will conduct some exploratory data analysis on the 
+Prosper Loans data set. According to their website “Prosper is America’s first 
+marketplace lending platform, with over $7 billion in funded loans. Prosper 
+allows people to invest in each other in a way that is financially and 
+socially rewarding.” See also the Prosper Homepage.  
+    
+The data set at hand contains 113,937 loans with 81 variables on each loan, 
+including loan amount, borrower rate (or interest rate), current loan status, 
+borrower income, borrower employment status, borrower credit history, and the 
+latest payment information. The dataset contains loans created between 
+2005-Q4 and 2014-Q1.
+  
+Variable Definitions for the Prosper Loans Dataset can be found here:[Variable Definitions.](https://docs.google.com/spreadsheets/d/1gDyi_L4UvIrLTEC6Wri5nbaMmkGmLQBk-Yx3z0XDEtI/edit#gid=0) 
+  
+For the following analysis I will focus on 28 variables, which I pre-selected 
+based on my subjective assumptions. I expect that those variables will reveal 
+some interesting insights about Prosper loans.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Install_Libraries}
+# Load all of the packages that you end up using in your analysis in this code
+# chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk. This
+# prevents the code from displaying in the knitted HTML output. You should set
+# echo=FALSE for all code chunks in your file, unless it makes sense for your
+# report to show the code that generated a particular plot.
+
+# The other parameters for "message" and "warning" should also be set to FALSE
+# for other code chunks once you have verified that each plot comes out as you
+# want it to. This will clean up the flow of your report.
+
+library(GGally)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(scales)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', Set_working_directories}
+
+# Load the Data
+getwd()
+setwd("C:/Users/Randy/Documents/Udacity/T2/P2")
+
+loans = read.csv("prosperLoanData.csv", header = TRUE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Load_the_Data}
+
+#list the feature names
+names(loans)
+
+#list the structure of loan data
+glimpse(loans)
+```
+# Data Wrangling
+
+Prior to performing my analysis I did small amount of data wrandgling to 
+remove unused columns and convert the data set to a tibble. I used the
+lubridate library functionsto convert the dates from factors to dates. 
+I also releveled LoanOriginationQuarter which appeared to be out of order.
+I used cut to create custom levels of DebtToIncomeRatio and corresponding 
+factor.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide',Drop_unsued_columns }
+
+loans <- loans[ , c(  "IncomeRange",  "LoanOriginalAmount",  "BorrowerRate",
+  "ProsperRating..numeric.",  "BorrowerState",  "EmploymentStatus",  
+  "EmploymentStatusDuration","LenderYield",  "ListingCategory..numeric.",  
+  "IsBorrowerHomeowner",  "Recommendations",  "DebtToIncomeRatio",  
+  "ProsperScore",  "Investors",   "MonthlyLoanPayment",  "ClosedDate",  
+  "LoanOriginationDate",  "LoanStatus",  "EstimatedReturn","EstimatedLoss",
+  "Occupation",  "OpenRevolvingMonthlyPayment", "LoanOriginationQuarter",
+  "RevolvingCreditBalance", "ProsperRating..Alpha.","StatedMonthlyIncome" 
+  )]
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide',Convert_to_tibble}
+
+loans <- tbl_df(loans)
+class(loans)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide',Convert_Dates }
+
+#use lubridate to convert the dates from factors to dates
+loans$ClosedDate<-ymd_hms(loans$ClosedDate)
+class(loans$ClosedDate)
+
+loans$LoanOriginationDate<-ymd_hms(loans$LoanOriginationDate)
+class(loans$LoanOriginationDate)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', Check_Factor_Levels_ON_QTRs}
+levels(loans$LoanOriginationQuarter)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', Reset_Factor_Levels_ON_QTRs}
+
+loans$LoanOriginationQuarter <- factor(loans$LoanOriginationQuarter, 
+  levels = c("Q1 2006","Q2 2006","Q3 2006","Q4 2006","Q1 2007","Q2 2007",
+  "Q3 2007","Q4 2007","Q1 2008","Q2 2008","Q3 2008","Q4 2008","Q1 2009","Q2 2009",
+  "Q3 2009","Q4 2009","Q1 2010","Q2 2010","Q3 2010","Q4 2010","Q1 2011","Q2 2011",
+  "Q3 2011","Q4 2011","Q1 2012","Q2 2012","Q3 2012","Q4 2012","Q1 2013","Q2 2013",
+  "Q3 2013","Q4 2013"))
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,Cut_Debt_To_Income_Ratio }
+
+#Echo the creation of categorical variables per rubric
+
+#Create a custom variable for DTI Ratio and associated factor
+loans$DebtToIncomeRatioLevel<-cut(loans$DebtToIncomeRatio, 
+  c(0, .10, .20, .30, .40, .50), c("Excellent", "Good", "Fair", "Poor", "Bad"))
+
+loans$DebtToIncomeRatioLevel <- factor(loans$DebtToIncomeRatioLevel, 
+  levels = c("Excellent", "Good", "Fair", "Poor", "Bad"))
+
+levels(loans$DebtToIncomeRatioLevel)
+
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, Rename_Loan_Category_List}
+
+#Echo the creation of categorical variables per rubric
+
+#create function to rename labels
+rename_listingCat <- function(i_listing) {
+  #return a string with renamed status passed
+  if (i_listing==0){ 'Not Available'}
+  else if (i_listing==1){'Debt consolidation'}
+  else if (i_listing==2){'Home Improvement'}
+  else if (i_listing==3){'Business'}
+  else if (i_listing==4){'Personal Loans'}
+  else if (i_listing==5){'Student Loan'}  
+  else if (i_listing==6){'Auto'}
+  else if (i_listing==7){'Other'}
+  else if (i_listing==8){'Baby/Adoption'}
+  else if (i_listing==9){'Boat'}  
+  else if (i_listing==10){'Cosmetic Procedure'}
+  else if (i_listing==11){'Engagment Ring'}  
+  else if (i_listing==12){'Green Loans'}
+  else if (i_listing==13){'Housing Expenses'} 
+  else if (i_listing==14){'Large Purchases'}
+  else if (i_listing==15){'Medical/Dental'}
+  else if (i_listing==16){'Motorcycle'}
+  else if (i_listing==17){'Rv'} 
+  else if (i_listing==18){'Taxes'}
+  else if (i_listing==19){'Vacation'}
+  else if (i_listing==20){'Wedding Loans'}  
+}
+
+#create a new variable with renamed loan status
+loans$ListingCategory.renamed <- apply(loans['ListingCategory..numeric.'],1,
+  rename_listingCat)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Review_Changes}
+
+#list the feature names
+names(loans)
+
+glimpse(loans)
+
+```
+
+
+# Univariate Plots Section
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, BAR_Loan_Origination_By_QTR}
+
+ggplot(loans, aes(x=loans$LoanOriginationQuarter)) +
+  geom_bar(stat = "count")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('Loan Originations per Quarter')
+
+summary(loans$LoanOriginationQuarter)
+
+```
+
+**_How many loans are they making?_** This chart shows the number of loans 
+originated by quarter. This shows that the number of origination increased from 
+2006 and then things fell off in 2008 to essentially nothing in early 2009 
+corresponding to their SEC relaunch. The trend has increased since late 2009.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bar_Borrower_State}
+
+ggplot(data=loans) +
+  geom_bar(mapping=aes(x=BorrowerState))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('Borrowers by State')
+
+summary(loans$BorrowerState)
+
+```
+
+**_So where are we making the loans?_**  It appears that the largest number of 
+loans are made to people in CA. The data also appears to align with the states 
+with higher populations (i.e., CA, FL, NY, TX) originaing more loans
+
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, ApplY_Loan_Category_Names}
+
+ggplot(aes(x = ListingCategory.renamed), 
+  data = subset(loans, !is.na(ProsperRating..numeric.))) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('Count of Listing Categories')
+
+summary(loans$ListingCategory.renamed)
+
+```
+
+**_So what are people borrowing for?_** It looks like the majority of the loans 
+are for debt consolidation
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Orig_Loan_Amt}
+
+ggplot(data=loans) +
+  geom_histogram(mapping=aes(x=LoanOriginalAmount), binwidth=1000)+
+  ggtitle('Loan Origination Amounts')
+
+summary(loans$LoanOriginalAmount)
+
+```
+
+**_So how much are people borrowing?_**  It appears that the bulk of the loans 
+are for less than 10,000 dollars with the actual mean of 8,337 dollars. We see 
+possible outliers in the $30K-$35K range
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Loan_Amount}
+
+# Number of Loans by Monthly Loan Payment
+ggplot(loans, aes(MonthlyLoanPayment)) + 
+  geom_histogram(binwidth = 50)+
+  ggtitle('Monthly Loan Payments')
+
+summary(loans$MonthlyLoanPayment)
+
+```
+
+**_How much are they paying?_**  The mean loan payments are $272 with max of 
+2251.50 per month range.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bar_Employment_Status}
+
+ggplot(data=loans) +
+  geom_bar(mapping=aes(x=EmploymentStatus)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ggtitle('Count of Employment Status')
+
+summary(loans$EmploymentStatus)
+
+```
+
+**_So are they working?_**  Most are employed. It would not make much financial 
+sense to loan money to people who are unemployed, though there are a relatively 
+small number of loans to people who are unemployed.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Employement_Status_Duration}
+
+ggplot(data=loans) +
+  geom_histogram(mapping=aes(x=EmploymentStatusDuration, binwidth=24))+
+  ggtitle('Employment Status Duration') 
+
+summary(loans$EmploymentStatusDuration)
+
+```
+
+**_How long have they been employed?_** With bin width set to 24, it appears 
+that most loan recipients are employed in the 24-48 month range, actual mean is 96.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bar_Income_Range}
+
+ggplot(data=loans) +
+  geom_bar(mapping=aes(x=IncomeRange))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ggtitle('Loan Counts by Income Range')
+
+summary(loans$IncomeRange)
+
+```
+
+**_How much are they  earning?_** The range goes from zero to $100K and 
+appears to be normally distributed, with most people falling between $25K-$75K
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bar_Is_Homeowner}
+
+ggplot(data=loans) +
+  geom_bar(mapping=aes(x=IsBorrowerHomeowner)) +
+  ggtitle('Is Borrower Homeowner?')
+
+summary(loans$IsBorrowerHomeowner)
+
+```
+
+**_Are they homewoners?_** The number of homeowners versus non-homeowners is 
+virtually the same
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Recommendations}
+
+ggplot(data=loans) +
+  geom_histogram(mapping=aes(x=Recommendations), binwidth =1)+
+  ggtitle('Number of Recommendations')
+
+summary(loans$Recommendations)
+
+```
+**_Did they have recommendations?_** Most loans requests don't have recommendations and there is a very tall 0.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Recommendations2}
+ggplot(subset(loans, Recommendations <=10), aes(factor(Recommendations))) +
+  geom_bar()+
+  xlim(0,10) +
+  ylim(0,4000) +
+  scale_x_discrete()+
+  ggtitle('Number of Recommendations')
+
+```
+
+Most loans dont have any recommendations, and when they do it's usually only 
+one.  Here we set the limits x, and y axis to exclude the handful of outliers 
+around 39 and those with only 1 recommendation to see the remaining distribution
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Investors}
+
+td<- loans %>% filter(Investors>0)
+ggplot(data=td) +
+  geom_histogram(mapping=aes(x=Investors, y=..count..), binwidth =20)+
+  ggtitle('Number of Loans by Investor Count')
+
+summary(loans$Investors)
+
+```
+
+**_Did they have investors?_**  There is single large bar because about 25% of 
+the loans have only a single investor. The average number of investors is about 
+80, but the max is 1189 which indcates outliers.  
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Investors2}
+
+td<- loans %>% filter(Investors>0)
+ggplot(data=td) +
+  geom_histogram(mapping=aes(x=Investors, y=..count..), binwidth =10)+
+  xlim(0,750) +
+  ylim(0,7000) +
+  ggtitle('Number of Loans by Investor Count')
+
+```
+
+Here we set the x limits to exclude those with only one investor and those 
+above 750 so we can zoom in on the remainder of the distribution.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bar_Prosper_Rating_Num}
+
+ggplot(data=loans) +
+  geom_bar(mapping=aes(x=ProsperRating..numeric.))+
+  ggtitle('Loan Counts by Prosper Rating')
+
+```
+
+**_Are they a good risk?_**  Next we look at the distribution of the numeric 
+version of the Prosper rating. Lower values are high risk, a value of 4 aligns 
+roughly to an average credit rating. This distribution also appears to be 
+normally distributed
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Borrower_Rate}
+
+ggplot(data=loans) +
+  geom_histogram(mapping=aes(x=BorrowerRate), binwidth = .005)+
+  ggtitle('Borrower Rates')
+
+```
+
+**_What rates are they getting?_**  Borrower Rate range from 0 to .4975. The 
+bulk of the loans seem to be near the 0.2 mark, the majority of the users are 
+in the middle of the risk ratings.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Hist_Debt_to_Income_Ratio}
+
+td<- loans %>% filter(DebtToIncomeRatio<1)
+ggplot(data=td) +
+  geom_histogram(mapping=aes(x=DebtToIncomeRatio), binwidth = .01) +
+  ggtitle('Debt to Income Ratio') 
+
+```
+
+**_Let's look at Debt-to-income-Ratio..._** There are some very high 
+debt-to-income ratios, some greater than 10.  I decided to filter those and plot 
+ratios less than 1.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, BAR_DTIR_By_Levels}
+
+ggplot(loans, aes(x=loans$DebtToIncomeRatioLevel)) +
+  geom_bar(stat = "count")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('Debt to Income Ratio Counts by Groupings')
+
+```
+
+**_Another view of Debt-to-income-Ratio..._**  In this chart I used the custom 
+debt-to-Income ratio levels, with ranges at .10 increments.  Most loans fall in 
+the level I characterized as 'fair' or better.
+
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Line_Default_Pct_By_QTR}
+
+loans.defaultrate <- loans %>%
+  filter(LoanStatus != "Current" & LoanStatus != "Past Due") %>%
+  group_by(Quarter = LoanOriginationQuarter, LoanStatus) %>%
+  summarise(Loans = n()) %>%
+  mutate(Rate = Loans / sum(Loans))
+
+ggplot(aes(x = Quarter, y = Rate * 100, group = LoanStatus), 
+       data = subset(loans.defaultrate, LoanStatus == "Defaulted")) +
+  geom_line(size = 0.9) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  stat_smooth(method = "lm", size = 0.7) +
+  ylab("Default Percentage") +
+  ggtitle('Default Percentage By Quarter') 
+
+```
+
+**_Are they defaulting on these loans?_** Defaults on loans have been in 
+decline, likely due to improved risk determination over time
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+My dataset is made up of 28 of the 81 total variables of the original dataset. I 
+removed the unused variables to make the dataset more manageable for this project. 
+
+### What is/are the main feature(s) of interest in your dataset?
+
+I think the ratings (prosper, credit score, etc) and the debt-to-income ratio 
+are of most interest. I think debt income ratio (DTI) can be used as a single 
+measure which comprises other risk measures like card utilization, etc
+
+### What other features in the dataset do you think will help support your
+
+Investors and their yield, borrowers and their income and rates
+
+### Did you create any new variables from existing variables in the dataset?
+
+Yes.  I created a variable of renamed listing categories, and a variable 
+DebtToIncomeRatioLevel which represents custom levels on DebtToIncomeRatio. 
+Finally, I use lubridate to create a variable LoanOriginationDate.year to hold 
+the year extracted from the loan origination date
+
+###Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the \
+form of the data? If so, why did you do this?
+
+I thought it was odd that loans would be approved for applicants with low credit 
+ratings or for people who were unemployed. There were missing values many seemed 
+appropriate given the loan lifecycle or the dates of certain implementations 
+(some things did not exist prioer to 2009).  There seemed to be a large number 
+Outliers in the dataset that needed to be filtered in some cases. I did not tidy 
+the data by segmenting categories of observations but I took some steps to 
+address the default way that dates and factors were imported.
+
+# Bivariate Plots Section
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Loan_Origination_By_QTR_DTIR}
+
+ggplot(data=loans, aes(x=loans$LoanOriginationQuarter, fill=loans$DebtToIncomeRatioLevel)) +
+  geom_bar(stat = "count")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('Loan Oiginations per Quarter by Debt-to-Income Ratio')
+
+```
+
+**_Debt to Income Ratio Levels per loans originated._** Here we see breakdown 
+of DTI across loan originations.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, DTIR_facet}
+
+ggplot(aes(x=DebtToIncomeRatio), data=loans) +
+  geom_density(aes(color = IncomeRange, 
+              fill  = IncomeRange), 
+              alpha = 0.5) +
+  facet_wrap(~IncomeRange, ncol=2, 
+               scales = "free")
+```
+
+**_Debt-to-income-ratio per income range._**  This chart shows the 
+breakout of DTI ratio in relationship to income range.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, BOXplot_Category_Loan_Amount}
+
+ggplot(loans, mapping=aes(x=ListingCategory..numeric.,y=LoanOriginalAmount)) +
+  geom_boxplot(aes(fill = ListingCategory.renamed)) +
+  xlab('Category') +
+  ylab('LoanOriginalAMount')+
+  ggtitle('Number of Loans by Category')
+
+```
+
+**_Loan origination amounts._** This series of boxplot shows the relative 
+distributions of loan categories. A boxlot showsa graphicalpicture of the five 
+number summary: minimum, first quartile, median, third quartile, and maximum. 
+This view also shows potential outliers.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Debt_To_Income}
+td<- loans %>% filter(DebtToIncomeRatio<1.0)
+ggplot(aes(x = DebtToIncomeRatio, y =BorrowerRate ),
+       data =  subset(td, !is.na(DebtToIncomeRatio))) +
+  theme(legend.position = "bottom") +
+  geom_point( position = position_jitter( h = 0),alpha=.5) +
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  scale_color_grey() +  
+  ggtitle('Borrower Rate vs Debt to Income Ratio')
+
+```
+
+**_Debt-to-Income-Ratio versus Borrower Rate_**. As expected higer risk is 
+associated with a person having more debt, higher risk resuts is a higher 
+borrower rates
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_RevolvingCreditBalance}
+
+ggplot(aes(y = BorrowerRate, x =RevolvingCreditBalance ),
+       data =  subset(loans, !is.na(RevolvingCreditBalance))) +
+  geom_point(alpha=.5)+
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Revolving Credit Balance')
+
+```
+
+**_Revolving Credit Balance versus Borrower Rate_**.  This appears to be counter 
+intuitive.  One would expect th rate to be higher if a person has a large 
+revolving credit balance.  This oculd be due to outliers and worther of further 
+inspection.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_OpenRevolvingMonthlyPayment}
+ggplot(aes(y = BorrowerRate, x =OpenRevolvingMonthlyPayment ),
+       data =  subset(loans, !is.na(OpenRevolvingMonthlyPayment))) +
+  geom_point(alpha=.5)+
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('BorrowerRate vs Open Revolving Monthly Payment') 
+```
+
+**_Open Revolving Monthly Payment versus Borrower Rate._** This appears to be 
+counter intuitive.  One would expect th rate to be higher if a person has a 
+large revolving monthly payment.  This oculd be due to outliers and worther of 
+further inspection.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Est_Return}
+
+ggplot(aes(x = BorrowerRate, y =EstimatedReturn ),
+       data =  subset(loans, !is.na(EstimatedReturn))) +
+  geom_point(alpha=.5)+
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Estimated Return') 
+
+```
+
+**_Estimated Return versus Borrower Rate._**  There is a positive relationship 
+between Borrower Rate and Estimated return.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Est_Loss}
+
+ggplot(aes(x = BorrowerRate, y =EstimatedLoss ),
+       data =  subset(loans, !is.na(EstimatedLoss))) +
+  geom_point(alpha=.5)+
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Estimated Loss') 
+```
+
+**_Estimated Loss versus Borrower Rate._** As one would expect Borrower Rate and 
+affects both expected return and estimated loss.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Lender_Yield}
+
+ggplot(aes(x = BorrowerRate, y =LenderYield),
+       data =  subset(loans, !is.na(LenderYield))) +
+  geom_point(alpha=.5)+
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('BorrowerRate vs Lender Yield')
+
+```
+
+**_Lender Yield versus Borrower Rate._**  Appears to be a very strong 
+relationship between Borrower rate and Lender Yield
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_MonthlyIncome_DTIR}
+  td<- loans %>% filter(StatedMonthlyIncome<20000 & DebtToIncomeRatio<1.0)
+  ggplot(aes(x = StatedMonthlyIncome, y =DebtToIncomeRatio ),
+       data =  subset(td, !is.na(DebtToIncomeRatio))) +
+  geom_point(alpha=.5)+ #shape=1
+  geom_smooth(method=lm,se=FALSE, color='yellow')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('BorrowerRate vs Lender Yield vs Propser Rating') 
+```
+
+**_Monthly Income versus Deb-to-Income-Ratio._** A lot of overplotting here but 
+I decided to leave this chart in, Open points helped somewhat along with the 
+regression line. There also appeared to be a lot of outliers in stated monthly 
+income.
+
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features \
+in the dataset?
+
+Overall, the choosen variables in the data set are highly correlated. Borrower 
+Rate and DIT were correlated with the other variables.
+
+### Did you observe any interesting relationships between the other features \
+(not the main feature(s) of interest)? 
+
+Lender Yield had a very strong correlation to borrower rate with Lender Yield 
+increasing linearly with increase in borrower rate. Also intersting was 
+debt-to-income ratio and its relationship to income range. Other varaibles were 
+correlated as well. For example, Individuals with a high income recieve larger 
+loans with lower rates.
+
+### What was the strongest relationship you found?
+
+The strongest relationship is between BorrowerRate and LenderYield, it was 
+almost 1 to 1.
+
+# Multivariate Plots Section
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_DTIR_Prosper}
+
+td<- loans %>% filter(DebtToIncomeRatio<1)
+ggplot(aes(y = BorrowerRate, x =DebtToIncomeRatio ,color=ProsperRating..Alpha.),
+       data =  subset(td, !is.na(DebtToIncomeRatio))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Debt-to-Income Ratio vs Propser Rating')
+
+```
+
+This chart was included in the bivariate section, however it has been colored 
+here using the Prosper Rating and included as a multivariate plot. The chart 
+shows consistency of rates within the prosper ratings
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_RevolCreditBalance_Prosper}
+
+td<- loans %>% filter(RevolvingCreditBalance<100000)
+ggplot(aes(y = BorrowerRate, x =RevolvingCreditBalance,color=ProsperRating..Alpha. ),
+       data =  subset(td, !is.na(RevolvingCreditBalance))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Revolving Credit Balance vs Propser Rating')
+
+```
+
+This chart was included in the bivariate section, however it has been colored 
+here using the Prosper Rating and included as a multivariate plot. The chart 
+shows consistency of rates within the prosper ratings
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_RevolMonthlyPayment_prosper}
+
+td<- loans %>% filter(OpenRevolvingMonthlyPayment<7500)
+ggplot(aes(y = BorrowerRate, x =OpenRevolvingMonthlyPayment,color=ProsperRating..Alpha. ),
+       data =  subset(td, !is.na(OpenRevolvingMonthlyPayment))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Open revolving Monthly Payment vs Propser Rating') 
+
+```
+
+This chart was included in the bivariate section, however it has been colored 
+here using the Prosper Rating and included as a multivariate plot. The chart 
+shows consistency of rates within the prosper ratings
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Est_Return_Prosper}
+
+ggplot(aes(y = BorrowerRate, x =EstimatedReturn ,color=ProsperRating..Alpha.),
+       data =  subset(loans, !is.na(EstimatedReturn))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Estimated Return vs Propser Rating')
+
+```
+
+This chart was included in the bivariate section, however it has been colored 
+here using the Prosper Rating and included as a multivariate plot. The chart 
+shows consistency of rates within the prosper ratings
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Est_Loss_Prosper}
+
+ggplot(aes(y = BorrowerRate, x =EstimatedLoss ,color=ProsperRating..Alpha.),
+       data =  subset(loans, !is.na(EstimatedLoss))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('BorrowerRate vs Estimated Loss vs Propser Rating')
+
+```
+
+This chart was included in the bivariate section, however it has been colored 
+here using the Prosper Rating and included as a multivariate plot. The chart 
+shows consistency of rates within the prosper ratings
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Lender_Yield_Prosper}
+
+ggplot(aes(x = BorrowerRate, y =LenderYield ,color=ProsperRating..Alpha.),
+       data =  subset(loans, !is.na(LenderYield))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('BorrowerRate vs Lender Yield vs Propser Rating')
+
+```
+
+Borrower Rate and LenderYield are highly correlated. This chart was included in 
+the bivariate section, however it has been colored here using the Prosper Rating 
+and included as a multivariate plot. The chart shows consistency of Rates within 
+the prosper ratings
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Income_Yield_Prosper}
+
+td<- loans %>% filter(StatedMonthlyIncome<20000)
+ggplot(aes(x = BorrowerRate, y =StatedMonthlyIncome ,color=ProsperRating..Alpha.),
+       data =  subset(td, !is.na(StatedMonthlyIncome))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('BorrowerRate vs Stated Monthly Income vs Propser Rating')
+
+```
+
+Rate and monthly income are weakly correlated but adding the credit rating 
+indicates that rates are consistent across similar income levels
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Matrix}
+subdt <- loans[c("BorrowerRate","LenderYield", "DebtToIncomeRatio","LoanOriginalAmount","ProsperScore" , "EstimatedReturn")]
+ggpairs(subdt[sample(1:nrow(subdt), "100", replace=FALSE),], 
+        upper = list(wrap = c(size = 10)), 
+        lower = list(continuous = "smooth", 
+                     wrap = c(method = "loess", fill = "blue"))) +
+        labs(title = "First 6 numerical Columns")
+
+
+```
+
+Correlation matrix to summarize and quantify some of the relationships noted 
+earlier
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. Were there features that strengthened each other in terms of \
+looking at your feature(s) of interest?
+
+This analysis helps us better understand the risk and estimated losses for 
+investing in a borrowesr with certain ratings and other factors. We investigated 
+the relationship between debt, income and monthly loan payments for our 
+borrowers.
+
+### Were there any interesting or surprising interactions between features?
+
+Most Investors prefer to invest in low risk, low borrower rate loans despite the 
+high lender yield for loans taken on higher borrower rate. Revolving Debt and 
+revolving debt payments seemed to correlated in the opposite direction.
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the \
+strengths and limitations of your model.
+
+No. I did not attempt to create a model.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Loan_Origination_By_QTR_DTIR2}
+ggplot(data=loans, aes(x=loans$LoanOriginationQuarter, fill=loans$DebtToIncomeRatioLevel)) +
+  geom_bar(stat = "count")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('Loan Oiginations per Quarter by Debt-to-Income Ratio')
+```
+
+### Description One
+
+While the number of loans originated has increased, this chart shows that the 
+proportion of new loans with better (lower) DIT ratios has also increased.
+
+### Plot Two
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Line_Default_Pct_By_QTR2}
+loans.defaultrate <- loans %>%
+  filter(LoanStatus != "Current" & LoanStatus != "Past Due") %>%
+  group_by(Quarter = LoanOriginationQuarter, LoanStatus) %>%
+  summarise(Loans = n()) %>%
+  mutate(Rate = Loans / sum(Loans))
+
+ggplot(aes(x = Quarter, y = Rate * 100, group = LoanStatus), 
+       data = subset(loans.defaultrate, LoanStatus == "Defaulted")) +
+  geom_line(size = 0.9) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  stat_smooth(method = "lm", size = 0.7) +
+  ylab("Default Percentage") +
+  ggtitle('Default Percentage By Quarter') 
+```
+
+
+### Description Two
+
+I’ve chosen this plot because shows the default rate (in percentage) of loans 
+over the years. It provides supporting evidence for the claim I've made in plot 
+one, that better debt-to-income ratios lead to reduced defaults.
+
+### Plot Three
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Scatter_Rate_vs_Est_Return_Prosper2}
+
+ggplot(aes(y = BorrowerRate, x =EstimatedReturn ,color=ProsperRating..Alpha.),
+       data =  subset(loans, !is.na(EstimatedReturn))) +
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle('BorrowerRate vs Estimated Return vs Propser Rating') 
+```
+
+### Description Three
+
+I’ve chosen this plot because shows strong relationship between borrower rate 
+and the estimated return.
+
+------
+
+# Reflection
+
+Prior to beginning work on the project I assumed that there would be data 
+related to requests that did not become loans. I was interested to know about 
+requests that were not funded and why.  However, after looking into the data it 
+appeared to contain only data for funded loans so I had to modify my approach. 
+My initial challenges with the data were related to the importation itself.  It 
+appears that R imports dates and other strings a factors by default and that 
+it’s not very good at doing so.  This dataset revealed to me the importance of 
+having a level of domain knowledge with respect to the data.  I spent a lot of 
+time trying to familiarize myself with the lending domain and its terminology 
+and many of the terms meant almost nothing to me and this made it hard for me to 
+know where to look for possible relationships because I had no “intuition” 
+regarding the data.  The primary takeaway for me was that these types of 
+industries need to constantly work toward improved risk identification and 
+mitigation policies in order to reduce defaults and increase investor yields. 
+As noted above, the relatiohships between revolving credit amounts and monthly 
+payment and borrower rate are counter to my expectation, future work might 
+investigate this further.
+
+------
+
+# References
+PDF: [R Markdown Cheatsheet](http://bit.ly/1SuNTo9)    
+    
+SITE: [Computing by groups within data.frames with dplyr and broom:](http://bit.ly/2oOhWQr)    
+SITE: [Cookbook for R](http://bit.ly/1iyqHp7)    
+SITE: [Seven Easy Graphs to Visualize Correlation Matrices in R](http://bit.ly/2I0bcrJ)  
+SITE: [Binning Outliers in a Histogram](http://bit.ly/2H4gOQh)
+    
+BOOK: R for Data Science, by Hadley Wicham & Garrett Grolemund     
+BOOK: R in Action: Data Analysis and Graphics in R, by Robert I. Kabacoff    
+
+
